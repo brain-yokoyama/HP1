@@ -26,7 +26,21 @@ async function readJson(): Promise<Content> {
 }
 
 async function writeJson(data: Content): Promise<void> {
-  await fs.writeFile(FILE, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  // Vercel などサーバーレス環境ではアプリ配下が読み取り専用のため書き込めない。
+  // その場合はクラッシュさせず、best-effort（控えの保存はスキップ）とする。
+  // ※ hero は Supabase を正とするため、書き込み失敗時も hero の永続化は影響を受けない。
+  try {
+    await fs.writeFile(FILE, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "EROFS" || code === "EACCES" || code === "EPERM") {
+      console.warn(
+        `content.json への書き込みをスキップしました（読み取り専用FS: ${code}）。hero は Supabase に保存されています。`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // --- ヒーローは Supabase を正とする ---
